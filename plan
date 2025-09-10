@@ -1,0 +1,13 @@
+Ver el tema de que el grafo es dirigido
+-Ver exactamente que estamos graficando al graficar iteraciones de una metaheuristica
+-Ver bien como es que se define el vecindario V
+
+Paso 1: Platear el modelo con restricciones lineales
+
+Paso 2: Evaluar distintos metaheurisitcas para el problema( TABU, BLAST, Hormigas,)
+
+Paso 3: Ir escribiendo en el informe los reusltados que van dando con cada uno de los modelos
+
+Paso 4 : Elegir el mejor y calcular resultados
+
+Paso 5: Repetir paso 1 para el segundo ejercicio y usar el modelo anterior, cambiando un poco las restricciones y la función objetivo.
