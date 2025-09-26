@@ -35,7 +35,7 @@ class Graph:
 
     def __len__(self) -> int:
         return sum(len(adj) for adj in self.edges.values())
-
+#Cuantos edges tiene el grafo
 
 # =========================
 # Lectura de CSV (simple)
@@ -73,7 +73,7 @@ def index_workers_by_node(workers: List[Worker]) -> Dict[int, List[int]]:
     for k, w in enumerate(workers):
         idx[w.home].append(k)
     return dict(idx)
-
+# te dice que trabajadores viven en cada nodo
 
 # =========================
 # Ejemplo mínimo de uso
@@ -186,6 +186,9 @@ def index_workers_by_node(workers: List[Worker]) -> Dict[int, List[int]]:
     for k, w in enumerate(workers):
         idx[w.home].append(k)
     return dict(idx)
+#A cada worker le asigas un indice y te dice qe workers vive en cada nodo
+#[,...,{2,3,54}] significa que e el nodo i esta los workers 2,3 y 54
+#home es un NODO donde esta un worker k
 
 # 1) y 2) Cobertura con radio: v -> [workers]  y  worker -> [nodos]
 # =========================================================
@@ -204,15 +207,15 @@ def build_worker_cover_maps(
     trabajadores_por_nodo: Dict[int, List[int]] = defaultdict(list)
     alcanzables_por_worker: Dict[int, List[int]] = {}
 
-    for home, w_ids in by_home.items():
-        dist = sp.from_src(home)  # d(home, ·) para este hogar
+    for home, w_ids in by_home.items():#REvisar que no este pasando por nodos e los que no hay workers. Tal vez hay que pasar, pero tenrelo en cuenta.
+        dist = sp.from_src(home)  # d(home, ·) para este hogar te da el Dijkstra para el nodo home, lista celeste de antes
         for i in w_ids:
             r = workers[i].r
             nodos = [v for v, d in dist.items() if d <= r]
-            nodos.sort()
-            alcanzables_por_worker[i] = nodos
+            nodos.sort() #Ni idea pq
+            alcanzables_por_worker[i] = nodos #Nodos me dice todos los nodos que puede alcanzar el worker i
             for v in nodos:
-                trabajadores_por_nodo[v].append(i)
+                trabajadores_por_nodo[v].append(i)# En cada iteracion le agrego a cada nodo v los trabajadores que pueden llegar a v
 
     # ordenar para determinismo
     for v in trabajadores_por_nodo:
@@ -249,7 +252,7 @@ if __name__ == "__main__":
     # alc = build_graph_reachability(g)
     # print(f"Nodos alcanzables desde 0: {alc.get(0, [])[:10]} ...")
 
-
+# A PAARTIR DE ACA, ES PARA VER SI LAS LSITAS SE CREARON BIEN(revisandolo medio a ojo)
     # ---------- Vecinos directos (salientes y entrantes) ----------
 def successors_of(g: Graph, v: int):
     """Nodos a los que se puede ir desde v (v -> u)."""
