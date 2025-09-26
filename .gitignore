@@ -1,0 +1,32 @@
+.# Archivos de Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Archivos de entorno virtual
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Archivos de configuración de VSCode
+.vscode/
+
+# Archivos temporales de sistema
+.DS_Store
+Thumbs.db
+
+# Logs y resultados
+*.log
+resultados.txt
+
+# Scripts por lotes de Windows (si no querés versionarlos)
+*.bat
