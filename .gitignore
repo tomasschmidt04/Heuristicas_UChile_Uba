@@ -28,5 +28,18 @@ Thumbs.db
 *.log
 resultados.txt
 
+codigo_mio_2 copy.py
+
 # Scripts por lotes de Windows (si no querés versionarlos)
 *.bat
+# Ignorar TODOS los .py en todo el repo…
+**/*.py
+# …pero mantener estos tres (ajustá la ruta si no están en la raíz)
+!codigo_ult_version.py
+!codigo_mio_2.py
+!codigo_variante.py
+
+
+# Ignorar todos los .txt
+**/*.txt
+EOF

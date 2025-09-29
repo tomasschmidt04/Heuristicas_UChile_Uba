@@ -158,7 +158,7 @@ def build_full_path_from_stops(g: Graph, stops_closed: List[int]) -> List[int]:
 if __name__ == "__main__":
     # Datos (ajustá rutas si hace falta)
     G_PATH = "dataset/dataset_enviar/grafo.csv"
-    W_PATH = "dataset/dataset_enviar/instancia1.csv"
+    W_PATH = "dataset/dataset_enviar/instancia5.csv"
     g = read_graph_csv(G_PATH, directed=True, skip_header=False)
     workers = read_workers_csv(W_PATH, skip_header=False)
     TpN, AporW, _ = build_worker_cover_maps(g, workers, home=0)
