@@ -2,7 +2,7 @@
 import csv
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Iterable, Tuple
+from typing import Dict, List, Iterable, Tuple,Optional,Set
 import heapq
 import random, math, statistics
 
@@ -194,13 +194,16 @@ def index_workers_by_node(workers: List[Worker]) -> Dict[int, List[int]]:
 # 1) y 2) Cobertura con radio: v -> [workers]  y  worker -> [nodos]
 # =========================================================
 def build_worker_cover_maps(
-    g: Graph, workers: List[Worker]
-) -> Tuple[Dict[int, List[int]], Dict[int, List[int]]]:
+    g: Graph,
+    workers: List[Worker],
+    home: Optional[int] = None
+) -> Tuple[Dict[int, List[int]], Dict[int, List[int]], Set[int]]:
     """
     Devuelve:
-      - trabajadores_por_nodo[v]: lista de índices de trabajadores i que pueden llegar a v (d(vi, v) <= r_i).
-      - alcanzables_por_worker[i]: lista de nodos v alcanzables desde home_i respetando r_i.
-    Optimiza calculando Dijkstra una sola vez por nodo hogar distinto.
+      - trabajadores_por_nodo[v]: lista de índices i que pueden llegar a v (d(vi,v) ≤ r_i)
+      - alcanzables_por_worker[i]: nodos v alcanzables por i
+      - nodos_vetados_ini: nodos que ningún trabajador puede alcanzar (no aparecen como key)
+        (home nunca se veta aquí)
     """
     sp = SPCache(g)
     by_home = index_workers_by_node(workers)
@@ -208,21 +211,27 @@ def build_worker_cover_maps(
     trabajadores_por_nodo: Dict[int, List[int]] = defaultdict(list)
     alcanzables_por_worker: Dict[int, List[int]] = {}
 
-    for home, w_ids in by_home.items():#REvisar que no este pasando por nodos e los que no hay workers. Tal vez hay que pasar, pero tenrelo en cuenta.
-        dist = sp.from_src(home)  # d(home, ·) para este hogar te da el Dijkstra para el nodo home, lista celeste de antes
+    for h, w_ids in by_home.items():
+        dist = sp.from_src(h)
         for i in w_ids:
             r = workers[i].r
             nodos = [v for v, d in dist.items() if d <= r]
-            nodos.sort() #Ni idea pq
-            alcanzables_por_worker[i] = nodos #Nodos me dice todos los nodos que puede alcanzar el worker i
+            nodos.sort()
+            alcanzables_por_worker[i] = nodos
             for v in nodos:
-                trabajadores_por_nodo[v].append(i)# En cada iteracion le agrego a cada nodo v los trabajadores que pueden llegar a v
+                trabajadores_por_nodo[v].append(i)
 
-    # ordenar para determinismo
     for v in trabajadores_por_nodo:
         trabajadores_por_nodo[v].sort()
 
-    return dict(trabajadores_por_nodo), alcanzables_por_worker
+    all_nodes = set(g.nodes)
+    covered_nodes = set(trabajadores_por_nodo.keys())
+    nodos_vetados_ini: Set[int] = all_nodes - covered_nodes
+    if home is not None and home in nodos_vetados_ini:
+        nodos_vetados_ini.remove(home)  # home nunca vetado de arranque
+
+    return dict(trabajadores_por_nodo), alcanzables_por_worker, nodos_vetados_ini
+
 
 # ============================================
 # 3) Reachability del grafo: u -> [nodos]
@@ -235,150 +244,14 @@ def build_graph_reachability(g: Graph) -> Dict[int, List[int]]:
     sp = SPCache(g)
     return {u: sorted(sp.from_src(u).keys()) for u in g.nodes}
 
-# =========================
-# Ejemplo mínimo
-# =========================
-if __name__ == "__main__":
-    G_PATH = "dataset/dataset_enviar/grafo.csv"
-    W_PATH = "dataset/dataset_enviar/instancia1.csv"
 
-    g = read_graph_csv(G_PATH, directed=True, skip_header=False)
-    workers = read_workers_csv(W_PATH, skip_header=False)
 
-    trab_por_nodo, nodos_por_worker = build_worker_cover_maps(g, workers)
-    print(f"Trabajadores que pueden llegar a 0: {trab_por_nodo.get(0, [])}")
-    print(f"Nodos que puede pisar el worker 0 (respetando r0): {nodos_por_worker.get(0, [])[:10]} ...")
 
     # (opcional) reachability completo de grafo:
     # alc = build_graph_reachability(g)
     # print(f"Nodos alcanzables desde 0: {alc.get(0, [])[:10]} ...")
 
-# A PAARTIR DE ACA, ES PARA VER SI LAS LSITAS SE CREARON BIEN(revisandolo medio a ojo)
-    # ---------- Vecinos directos (salientes y entrantes) ----------
-def successors_of(g: Graph, v: int):
-    """Nodos a los que se puede ir desde v (v -> u)."""
-    return sorted([(u, w) for u, w in g.neighbors(v)], key=lambda x: x[0])
 
-def predecessors_of(g: Graph, v: int):
-    """Nodos que llegan directo a v (u -> v)."""
-    preds = []
-    for u, adj in g.edges.items():
-        if v in adj:
-            preds.append((u, adj[v]))
-    return sorted(preds, key=lambda x: x[0])
-
-# ---------- Reporte de reachability de trabajadores a un objetivo ----------
-def print_workers_reaching_target(g: Graph, workers: list[Worker], target: int = 0, show_non_reachers: bool = True):
-    print(f"\n=== Chequeo para target = {target} ===")
-
-    # 1) Vecinos directos del grafo
-    succ = successors_of(g, target)
-    preds = predecessors_of(g, target)
-    print("\nVecinos SALIENTES de {0} ( {0} -> u ):".format(target))
-    for u, w in succ:
-        print(f"  {target} -> {u} (costo {w})")
-    print("\nVecinos ENTRANTES a {0} ( u -> {0} ):".format(target))
-    for u, w in preds:
-        print(f"  {u} -> {target} (costo {w})")
-
-    # 2) Trabajadores que pueden llegar a 'target' (d(home, target) <= r_i)
-    sp = SPCache(g)
-    reachers = []
-    non_reachers = []
-    for i, w in enumerate(workers):
-        d = sp.distance(w.home, target)
-        if d <= w.r:
-            reachers.append((i, w.home, w.r, d))
-        else:
-            non_reachers.append((i, w.home, w.r, d))
-
-    reachers.sort(key=lambda t: (t[3], t[1]))  # ordeno por distancia y luego por nodo hogar
-    print(f"\nTrabajadores que PUEDEN llegar a {target} (d <= r_i): {len(reachers)} / {len(workers)}")
-    for i, home, r, d in reachers:
-        print(f"  worker {i:>3} | home={home:>5} | r_i={r:.3f} | dist({home}->{target})={d:.3f}  -> OK")
-
-    if show_non_reachers and non_reachers:
-        print(f"\n(Info) Algunos que NO llegan a {target} (primeros 10):")
-        for i, home, r, d in non_reachers[:10]:
-            gap = d - r
-            print(f"  worker {i:>3} | home={home:>5} | r_i={r:.3f} | dist={d:.3f}  -> EXCEDE por {gap:.3f}")
-
-
-
-
-
-#FOPMACION DE SUBTOURS
-
-from dataclasses import dataclass
-from typing import Dict, Optional, List, Tuple
-
-# Estado de "camino sin ciclos": a cada nodo le puede entrar a lo sumo 1 y salir a lo sumo 1
-@dataclass
-class EstadoCamino:
-    pred: Dict[int, Optional[int]]
-    succ: Dict[int, Optional[int]]
-
-def crear_estado_camino(nodos: List[int]) -> EstadoCamino:
-    return EstadoCamino(
-        pred={u: None for u in nodos},
-        succ={u: None for u in nodos},
-    )
-
-def tiene_entrada(v: int, E: EstadoCamino) -> bool:
-    return E.pred[v] is not None
-
-def tiene_salida(u: int, E: EstadoCamino) -> bool:
-    return E.succ[u] is not None
-
-def cierra_ciclo(u: int, v: int, E: EstadoCamino) -> bool:
-    """¿Agregar u->v crearía un ciclo? (¿hay camino v → ... → u siguiendo succ?)."""
-    x = v
-    while x is not None:
-        if x == u:
-            return True
-        x = E.succ[x]
-    return False
-
-def arco_factible(u: int, v: int, E: EstadoCamino) -> bool:
-    """Chequeos de subtour estilo TSP dirigido."""
-    if u == v:                # nada de auto-arcos
-        return False
-    if tiene_salida(u, E):    # out-degree(u) ≤ 1
-        return False
-    if tiene_entrada(v, E):   # in-degree(v)  ≤ 1
-        return False
-    if cierra_ciclo(u, v, E): # no cerrar ciclos prematuros
-        return False
-    return True
-
-def agregar_arco(u: int, v: int, E: EstadoCamino) -> None:
-    """Asumí que arco_factible(u,v,E) ya dio True."""
-    E.succ[u] = v
-    E.pred[v] = u
-
-def camino_desde(start: int, E: EstadoCamino) -> List[int]:
-    """Devuelve la cadena siguiendo succ desde 'start'."""
-    camino = [start]
-    x = E.succ[start]
-    while x is not None and x not in camino:
-        camino.append(x)
-        x = E.succ[x]
-    return camino
-
-def extremos_componentes(E: EstadoCamino) -> List[Tuple[int, int]]:
-    """
-    Devuelve (head, tail) de cada componente camino:
-    head = nodo sin pred; tail = nodo sin succ dentro de esa cadena.
-    """
-    # heads: nodos sin entrada
-    heads = [u for u, p in E.pred.items() if p is None and E.succ[u] is not None]
-    comps = []
-    for h in heads:
-        tail = h
-        while E.succ[tail] is not None:
-            tail = E.succ[tail]
-        comps.append((h, tail))
-    return comps
 
 
 
@@ -428,23 +301,36 @@ def _pick_topk_random(h: List[Tuple[float, int, float, int]],
     candidates = [heapq.heappop(h) for _ in range(k)]
     return rng.choice(candidates)
 
-def _remove_workers_from_TpN(TpN: Dict[int, Set[int]],
-                             alcanzables_por_worker: Dict[int, List[int]],
-                             picked_node: int) -> int:
+def _remove_workers_from_TpN(
+    TpN: Dict[int, Set[int]],
+    alcanzables_por_worker: Dict[int, List[int]],
+    picked_node: int,
+    nodos_vetados: Set[int],
+    home: int
+) -> int:
     """
     Levanta TODOS los workers en 'picked_node' y los elimina de todos los nodos alcanzables.
-    Devuelve la cantidad levantada.
+    Si algún nodo queda vacío -> pasa a 'nodos_vetados' (excepto 'home') y se borra de TpN.
+    Devuelve cuántos levantó en 'picked_node'.
     """
     removed = list(TpN.get(picked_node, set()))
     if not removed:
         return 0
+
+    # para cada worker levantado, limpiarlo de todos los nodos a los que podía llegar
     for w in removed:
         for u in alcanzables_por_worker.get(w, []):
-            if u in TpN:
-                TpN[u].discard(w)
-                if not TpN[u]:
-                    del TpN[u]
+            ws = TpN.get(u)
+            if ws is None:
+                continue
+            ws.discard(w)
+            if not ws:
+                if u != home:
+                    nodos_vetados.add(u)
+                del TpN[u]
+
     return len(removed)
+
 
 def estimate_scales(
     home: int,
@@ -477,79 +363,80 @@ def run_blast_selection_dynamic(
     return_home: bool = True,
     dist_scale: Optional[float] = None,
     count_scale: Optional[float] = None,
+    nodos_vetados: Optional[Set[int]] = None,  # vetados para selección (transitables)
+    require_people: bool = True,
+    pickup_at_home: bool = True,
 ) -> Tuple[List[int], int, float, float]:
-    """
-    Devuelve:
-      - orden_de_nodos_visitados
-      - total_workers_levantados
-      - tour_cost_sin_regreso
-      - tour_cost_con_regreso (si return_home=True; si no, igual al anterior)
-    """
     rng = random.Random(seed)
-    TpN_sets = _to_set_map(trabajadores_por_nodo)
+    TpN_sets = {v: set(ws) for v, ws in trabajadores_por_nodo.items()}
+    nodos_vetados = set(nodos_vetados or set())
 
-    # Escalas para normalizar (si no se pasan)
+    # escalas fijas iniciales (podés usar re-escalado por iteración si te conviene)
     if dist_scale is None or count_scale is None:
         dist_scale, count_scale = estimate_scales(home, g, trabajadores_por_nodo)
 
     pos_curr = home
-    visitados: Set[int] = set([home])  # evitar revisitar
+    visitados: Set[int] = set([home])
     orden: List[int] = []
     total_levantados = 0
     tour_cost = 0.0
 
     sp = SPCache(g)
 
-    # --- NUEVO: levantar en home si hay gente ---
-    if home in TpN_sets and TpN_sets[home]:
-        total_levantados += _remove_workers_from_TpN(TpN_sets, alcanzables_por_worker, home)
-        # no sumamos costo (distancia 0), y dejar 'home' en visitados está bien
-
+    # recoger en home (costo 0)
+    if pickup_at_home and TpN_sets.get(home):
+        total_levantados += _remove_workers_from_TpN(
+            TpN_sets, alcanzables_por_worker, home, nodos_vetados, home
+        )
 
     while True:
-        dist_curr = sp.from_src(pos_curr)  # Dijkstra desde posición actual
-        heap_scores = _make_heap(dist_curr, TpN_sets, alpha, beta,
-                                 dist_scale=dist_scale, count_scale=count_scale,
-                                 excluidos=visitados)
-        choice = _pick_topk_random(heap_scores, topk, rng)
-        if choice is None:
+        dist_curr = sp.from_src(pos_curr)  # Dijkstra normal
+
+        # heap: solo nodos con gente, NO visitados y NO vetados
+        h: List[Tuple[float, int, float, int]] = []
+        for v, ws in TpN_sets.items():
+            if v in visitados or v in nodos_vetados:
+                continue
+            cnt = len(ws)
+            if require_people and cnt == 0:
+                continue
+            d = dist_curr.get(v, float("inf"))
+            if not math.isfinite(d):
+                continue
+            score = alpha * (d / (dist_scale or 1.0)) - beta * (cnt / (count_scale or 1.0))
+            heapq.heappush(h, (score, v, d, cnt))
+
+        if not h:
             break
 
-        score, v, d, cnt = choice
-        # sumamos el costo del salto actual
+        k = min(topk, len(h))
+        candidates = [heapq.heappop(h) for _ in range(k)]
+        score, v, d, cnt = rng.choice(candidates)
+
+        # levantar; si “se vació” por efectos cruzados, NO avanzamos ni costeamos
+        levantados = _remove_workers_from_TpN(
+            TpN_sets, alcanzables_por_worker, v, nodos_vetados, home
+        )
+        if require_people and levantados == 0:
+            continue
+
         tour_cost += d
-        orden.append(v)
-
-        # levantar y actualizar
-        levantados = _remove_workers_from_TpN(TpN_sets, alcanzables_por_worker, v)
         total_levantados += levantados
-
+        orden.append(v)
         pos_curr = v
         visitados.add(v)
 
     tour_cost_with_return = tour_cost
     if return_home and orden:
-        # volver al home desde el último
-        d_back = sp.distance(pos_curr, home)
+        d_back = sp.distance(pos_curr, home)  # real (transitando vetados si hace falta)
         if math.isfinite(d_back):
             tour_cost_with_return += d_back
-        else:
-            # si no hay camino de vuelta, dejamos el costo sin regreso
-            pass
 
     return orden, total_levantados, tour_cost, tour_cost_with_return
+
 # =========================
 # Ejemplo de uso en __main__
-# =========================
-if __name__ == "__main__":
-    G_PATH = "dataset/dataset_enviar/grafo.csv"
-    W_PATH = "dataset/dataset_enviar/instancia1.csv"
-
-    g = read_graph_csv(G_PATH, directed=True, skip_header=False)
-    workers = read_workers_csv(W_PATH, skip_header=False)
-
-    # Si usás tu SPCache con dijkstra_verbose, perfecto; también funciona con dijkstra_lazy
-    print_workers_reaching_target(g, workers, target=0, show_non_reachers=True)
+# ======================
 
 
 
@@ -675,28 +562,152 @@ def run_blast_with_2opt(
     )
 
     return orden, c_ret, orden_2opt, costo_2opt, levantados
+def materializar_tour(g: Graph, home: int, orden: List[int], return_home: bool = True):
+    """
+    Convierte la secuencia de paradas `orden` en un camino explícito usando caminos mínimos.
+    Devuelve: full_path (lista de nodos consecutivos), costo_total, legs (detalle de cada tramo).
+    Si algún tramo es inalcanzable, lanza ValueError.
+    """
+    pos = home
+    full_path = [home]
+    costo = 0.0
+    legs = []  # cada item: {"from": u, "to": v, "cost": d, "path": [u,...,v]}
+
+    for v in orden:
+        dist, parent = dijkstra_verbose(g, pos)
+        d = dist.get(v, float("inf"))
+        if not math.isfinite(d):
+            raise ValueError(f"No hay camino desde {pos} a {v}.")
+        path = reconstruir_camino(parent, pos, v)
+        legs.append({"from": pos, "to": v, "cost": d, "path": path})
+        costo += d
+        full_path.extend(path[1:])  # evito duplicar 'pos'
+        pos = v
+
+    if return_home and orden:
+        dist, parent = dijkstra_verbose(g, pos)
+        d = dist.get(home, float("inf"))
+        if not math.isfinite(d):
+            raise ValueError(f"No hay camino de regreso desde {pos} a {home}.")
+        path = reconstruir_camino(parent, pos, home)
+        legs.append({"from": pos, "to": home, "cost": d, "path": path})
+        costo += d
+        full_path.extend(path[1:])
+
+    return full_path, costo, legs
+
+
+def guardar_tour_txt(filepath: str, home: int, orden: List[int],
+                     full_path: List[int], costo_total: float, legs: List[dict],
+                     titulo: str = "TOUR"):
+    """
+    Escribe un .txt con paradas, camino expandido y costos por tramo.
+    """
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(f"{titulo}\n")
+        f.write("=" * len(titulo) + "\n\n")
+
+        # Paradas (arrancando en 0)
+        f.write("Paradas (con 0 al inicio):\n")
+        f.write(", ".join(map(str, [home] + orden)) + "\n\n")
+
+        # Camino expandido
+        f.write("Camino expandido (nodo por nodo):\n")
+        f.write(", ".join(map(str, full_path)) + "\n\n")
+
+        # Tramos
+        f.write("Tramos:\n")
+        for k, leg in enumerate(legs, 1):
+            u, v, d, path = leg["from"], leg["to"], leg["cost"], leg["path"]
+            f.write(f"  {k:02d}) {u} -> {v} | costo = {d:.3f} | via: {', '.join(map(str, path))}\n")
+        f.write("\n")
+
+        # Resumen
+        f.write(f"Costo total (incluye regreso si aplica): {costo_total:.3f}\n")
+        f.write(f"N° de paradas (sin contar el 0): {len(orden)}\n")
+        f.write(f"Largo camino expandido (nodos): {len(full_path)}\n")
+
 
 if __name__ == "__main__":
+    # RUTAS DE ARCHIVOS (ajustá si hace falta)
     G_PATH = "dataset/dataset_enviar/grafo.csv"
     W_PATH = "dataset/dataset_enviar/instancia1.csv"
 
+    # ==== CARGA ====
     g = read_graph_csv(G_PATH, directed=True, skip_header=False)
     workers = read_workers_csv(W_PATH, skip_header=False)
-    TpN, AporW = build_worker_cover_maps(g, workers)
 
+    # ==== MAPAS DE COBERTURA + NODOS VETADOS INICIALES ====
     home = 0
-    alpha, beta = 1.0, 0.0  # arranque razonable (con normalización previa, suelen funcionar bien)
+    TpN, AporW, nodos_vetados_ini = build_worker_cover_maps(g, workers, home=home)
 
-    orden, costo_ini, orden_mej, costo_mej, lev = run_blast_with_2opt(
-        home=home, g=g,
+    # ==== PARÁMETROS BLAST ====
+    alpha, beta = 1.0, 1.5   # razonables con normalización
+    topk, seed = 3, 42
+
+    # ==== BLAST DINÁMICO (con vetados) ====
+    orden, levantados, c_no_ret, c_ret = run_blast_selection_dynamic(
+        home=home,
+        g=g,
         trabajadores_por_nodo=TpN,
         alcanzables_por_worker=AporW,
-        alpha=alpha, beta=beta,
-        topk=3, seed=42, return_home=True
+        alpha=alpha,
+        beta=beta,
+        topk=topk,
+        seed=seed,
+        return_home=True,
+        nodos_vetados=nodos_vetados_ini,   # vetados solo para selección (transitables en Dijkstra)
+        require_people=True,
+        pickup_at_home=True,
     )
 
-    print(f"Levantados: {lev}")
-    print(f"Orden inicial ({len(orden)}): {orden[:20]}{'...' if len(orden)>20 else ''}")
-    print(f"Costo inicial (con regreso): {costo_ini:.3f}")
-    print(f"Orden 2-opt   ({len(orden_mej)}): {orden_mej[:20]}{'...' if len(orden_mej)>20 else ''}")
-    print(f"Costo 2-opt   (con regreso): {costo_mej:.3f}")
+    # ==== COSTOS INICIALES ====
+    # (ya vienen de la función; acá solo los mostramos claramente)
+    print("=== BLAST: COSTOS ===")
+    print(f"Nodos en orden (sin incluir 0): {len(orden)}")
+    print(f"Trabajadores levantados: {levantados}")
+    print(f"Costo sin regreso: {c_no_ret:.3f}")
+    print(f"Costo con regreso: {c_ret:.3f}")
+
+    # ==== 2-OPT SOBRE EL ORDEN ====
+    orden_2opt, costo_2opt = two_opt_improve(
+        home=home,
+        g=g,
+        route=orden,            # importante: 2-opt trabaja **sin** el home en la lista
+        return_home=True,
+        max_iters=50,
+        first_improvement=True,
+    )
+
+    # Para comparar también sin regreso (opcional)
+    sp = SPCache(g)
+    costo_2opt_sin = compute_route_cost(sp, home, orden_2opt, return_home=False)
+
+    # ==== PRINTS FINALES ====
+    print("\n=== 2-OPT: COSTOS ===")
+    print(f"Nodos en orden 2-opt (sin incluir 0): {len(orden_2opt)}")
+    print(f"Costo 2-opt sin regreso: {costo_2opt_sin:.3f}")
+    print(f"Costo 2-opt con regreso: {costo_2opt:.3f}")
+    print(f"\nMejora (con regreso): {c_ret:.3f}  ->  {costo_2opt:.3f}  (Δ = {c_ret - costo_2opt:.3f})")
+        # ==== DUMP A TXT: TOUR INICIAL ====
+    try:
+        full_path_ini, costo_tot_ini, legs_ini = materializar_tour(g, home, orden, return_home=True)
+        guardar_tour_txt("tour_inicial.txt", home, orden, full_path_ini, costo_tot_ini, legs_ini,
+                         titulo="TOUR INICIAL (BLAST)")
+        print('✔ Guardado "tour_inicial.txt"')
+    except ValueError as e:
+        print(f"[WARN] No se pudo materializar el tour inicial: {e}")
+
+    # ==== DUMP A TXT: TOUR 2-OPT ====
+    try:
+        full_path_2opt, costo_tot_2opt, legs_2opt = materializar_tour(g, home, orden_2opt, return_home=True)
+        guardar_tour_txt("tour_2opt.txt", home, orden_2opt, full_path_2opt, costo_tot_2opt, legs_2opt,
+                         titulo="TOUR 2-OPT (Mejorado)")
+        print('✔ Guardado "tour_2opt.txt"')
+    except ValueError as e:
+        print(f"[WARN] No se pudo materializar el tour 2-opt: {e}")
+
+
+    # (Opcional) ver la ruta “con 0 al principio” para inspección visual:
+    # print("Ruta inicial (con 0):", [home] + orden[:20], "...")
+    # print("Ruta 2-opt   (con 0):", [home] + orden_2opt[:20], "...")

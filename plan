@@ -11,3 +11,16 @@ Paso 3: Ir escribiendo en el informe los reusltados que van dando con cada uno d
 Paso 4 : Elegir el mejor y calcular resultados
 
 Paso 5: Repetir paso 1 para el segundo ejercicio y usar el modelo anterior, cambiando un poco las restricciones y la función objetivo.
+
+
+buena quiero arrancar devuelta con el codigo que quiero que hagas:
+Voy a tratar de detallarte lo mejor posible lo que tenes que hacer:
+El objetivo va a crear un TSP, donde pasemos como maximo una vez por cada nodo(no necesariamente por todos) y pasemos a buscar a todas las personas(que pueden moverse una distancia ri)
+Comenzando desde el nodo 0(home), vamos a realizar las sigueintes iteraciones e ir agregando nodo al camino del TSP. Una vez agregado un nodo, este nuevo nodo va a ser el nuevo home. 
+Se va a continuar las iteraciones hasta habe recorrido a todas las personas, en ese caso, volvemos a home. 
+Primero nos creamos un conjunto llamado Trabajadores_por_nodo y alcanzables _por _worker, que esos ya estan correctamente reados en el archivo de 2"codigo_mio_2.py"
+
+Vamos a ver ahora como es que agregamos un nodo al camino del TSP
+a Paritr del ultimo nodo agregado(home):
+Paso 1: Crear un djastra que mantenga un vector de nodos "visitados".  Estos nodos Djastra no los puede usar para realizar los caminos mínimos. desde la raiz. 
+2) Luego a partir del conjunto  TPN(trabajdores por nodo) vamos a iterar sobre el. Vamos a ir guardandonos en un heap los 3 nodos
